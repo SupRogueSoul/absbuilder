@@ -58,10 +58,18 @@ export default function Builder() {
           .eq('user_id', user.id)
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase fetch error details:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+          });
+          throw error;
+        }
 
         if (!data) {
-          showToast('Project not found.', 'error');
+          showToast('Project not found. Check if you have access to it.', 'error');
           router.push('/dashboard');
           return;
         }
@@ -101,8 +109,12 @@ export default function Builder() {
           clearInterval(stageInterval);
         };
       } catch (err) {
-        console.error('Error fetching site details:', err);
-        showToast('Failed to load project details.', 'error');
+        console.error('Error fetching site details:', {
+          message: err.message,
+          code: err.code,
+          details: err.details
+        });
+        showToast(`Failed to load project: ${err.message}`, 'error');
         router.push('/dashboard');
       } finally {
         setDbLoading(false);

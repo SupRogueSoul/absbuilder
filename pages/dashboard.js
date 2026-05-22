@@ -195,7 +195,15 @@ export default function Dashboard() {
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase fetch error details:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+          });
+          throw error;
+        }
 
         if (dbSites && dbSites.length === 0) {
           // Pre-populate database with 2 sample sites
@@ -207,7 +215,8 @@ export default function Dashboard() {
               color: '#6c63ff',
               initial: 'P',
               prompt: 'A premium portfolio website for a digital artist',
-              generated_html: generateSampleHTML('My Portfolio', 'Creative Digital Artistry Portfolio', '#6c63ff')
+              generated_html: generateSampleHTML('My Portfolio', 'Creative Digital Artistry Portfolio', '#6c63ff'),
+              created_at: new Date().toISOString()
             },
             {
               user_id: user.id,
@@ -216,7 +225,8 @@ export default function Dashboard() {
               color: '#a78bfa',
               initial: 'S',
               prompt: 'A landing page for an AI productivity tool startup',
-              generated_html: generateSampleHTML('My SaaS Startup', 'Accelerating Creative Productivity', '#a78bfa')
+              generated_html: generateSampleHTML('My SaaS Startup', 'Accelerating Creative Productivity', '#a78bfa'),
+              created_at: new Date().toISOString()
             }
           ];
 
@@ -225,14 +235,23 @@ export default function Dashboard() {
             .insert(sampleSites)
             .select();
 
-          if (insertError) throw insertError;
+          if (insertError) {
+            console.error('Supabase insert error details:', {
+              message: insertError.message,
+              code: insertError.code,
+              details: insertError.details
+            });
+            throw insertError;
+          }
           setSites(inserted || []);
         } else {
           setSites(dbSites || []);
         }
       } catch (err) {
         console.error('Error fetching sites from Supabase:', err);
-        showToast('Failed to load websites from database.', 'error');
+        showToast(`Database Error: ${err.message}. Check console for details.`, 'error');
+        // Still set empty array so app doesn't crash
+        setSites([]);
       } finally {
         setDbLoading(false);
       }
@@ -349,7 +368,7 @@ export default function Dashboard() {
       const data = await response.json();
       stopStatusCycle();
 
-      if (!response.ok && !data.html) {
+      if (!response.ok) {
         throw new Error(data.message || 'Generation failed');
       }
 
@@ -371,20 +390,31 @@ export default function Dashboard() {
         generated_html: data.html
       };
 
+      console.log('Attempting Supabase insert for user:', user.id);
       const { data: insertedSite, error: insertError } = await supabase
         .from('sites')
         .insert([newSite])
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      console.log('Supabase insert result:', { insertedSite, insertError });
+
+      if (insertError) {
+        console.error('Supabase insert error full details:', JSON.stringify(insertError, null, 2));
+        throw new Error(`Database error: ${insertError.message} (code: ${insertError.code})`);
+      }
+
+      if (!insertedSite || !insertedSite.id) {
+        console.error('Insert succeeded but no data returned:', insertedSite);
+        throw new Error('Site was created but no ID was returned. Check Supabase RLS policies.');
+      }
 
       showToast('Website generated successfully!', 'success');
       router.push(`/builder/${insertedSite.id}`);
     } catch (err) {
       stopStatusCycle();
       setIsGenerating(false);
-      showToast('Generation failed. Check your API key or connection.', 'error');
+      showToast(err.message || 'Generation failed. Check your API key or connection.', 'error');
       console.error('Error generating website:', err);
     }
   };
@@ -576,7 +606,7 @@ export default function Dashboard() {
                       </div>
                       <div className={styles.metaField}>
                         <span>🤖 Model:</span>
-                        <strong style={{ color: 'var(--accent2)' }}>Gemini 2.5 Flash</strong>
+                        <strong style={{ color: 'var(--accent2)' }}>Gemini 2.0 Flash (Free)</strong>
                       </div>
                     </div>
                   </div>
