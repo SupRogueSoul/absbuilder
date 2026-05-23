@@ -38,6 +38,8 @@ export default function Builder() {
     'Make the hero bigger'
   ];
 
+  const hasFetchedRef = useRef(false);
+
   // Auth & Project Load Check
   useEffect(() => {
     if (loading) return;
@@ -47,6 +49,8 @@ export default function Builder() {
     }
 
     if (!id) return; // Wait for router id query to resolve
+    if (hasFetchedRef.current) return; // Prevent re-fetching on alt-tab / re-render
+    hasFetchedRef.current = true;
 
     const fetchSiteDetails = async () => {
       setDbLoading(true);
@@ -122,7 +126,7 @@ export default function Builder() {
     };
 
     fetchSiteDetails();
-  }, [id, user, loading, router]);
+  }, [id, user, loading]);
 
   // Scroll to bottom of chat history when history updates
   useEffect(() => {

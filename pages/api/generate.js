@@ -185,7 +185,7 @@ export default async function handler(req, res) {
   let geminiFullPrompt = '';
 
   if (mode === 'generate') {
-    systemPrompt = `You are an elite web designer and front-end engineer. Create a breathtaking, fully self-contained single-file HTML website.
+    systemPrompt = `You are an elite web designer and front-end engineer. Create a breathtaking, fully self-contained single-file HTML website with MULTIPLE pages/sections.
 Rules:
 1. Return ONLY raw HTML — no markdown, no backticks, no explanation.
 2. Everything in one file: HTML + <style> + <script>.
@@ -194,19 +194,31 @@ Rules:
 5. Include smooth scroll, hover effects, and subtle CSS animations.
 6. Fully mobile-responsive with media queries.
 7. Use semantic HTML5.
-8. NO placeholder images — use CSS gradients or SVG shapes.
-9. Include: navbar, hero, at least 2 content sections, footer.
-10. Choose a cohesive color palette that fits the described purpose.`;
-    userMessage = `Create a website for this description: "${prompt}"`;
+8. NO placeholder images — use CSS gradients, SVG shapes, or CSS art.
+9. Choose a cohesive color palette that fits the described purpose.
+10. REQUIRED SECTIONS — include ALL of these as separate full sections with IDs:
+    - Sticky navbar with logo and working anchor links to every section
+    - Hero section with headline, subheading, and CTA button
+    - Services or Features section (3–6 cards)
+    - Work or Portfolio or About section with real content
+    - Pricing section with 3 tiers (if applicable) OR a detailed About/Team section
+    - Testimonials or Stats section
+    - Contact section with a styled form (name, email, message fields)
+    - Footer with links and copyright
+11. The navbar links MUST use anchor href="#section-id" so clicking them scrolls to each section.
+12. Add a JavaScript scroll spy so the active nav link highlights as the user scrolls.
+13. Each section must have substantial, realistic content — not placeholder text.`;
+    userMessage = `Create a complete multi-section website for this description: "${prompt}"`;
     geminiFullPrompt = `${systemPrompt}\n\n${userMessage}`;
 
   } else if (mode === 'edit') {
-    systemPrompt = `You are an elite web designer making targeted edits to an existing website.
+    systemPrompt = `You are an elite web designer making targeted edits to an existing multi-section website.
 Rules:
 1. Return ONLY the complete updated raw HTML — no markdown, no backticks, no explanation.
-2. Preserve all existing design quality — only apply the requested change.
-3. Keep all sections, modify only what was asked.
-4. Output must be a complete, valid, self-contained HTML file.`;
+2. Preserve ALL existing sections and content — only apply the requested change.
+3. Keep the navbar, hero, all content sections, and footer intact.
+4. Keep all anchor links and scroll spy JavaScript working.
+5. Output must be a complete, valid, self-contained HTML file.`;
     userMessage = `Here is the current HTML:\n\`\`\`html\n${currentHTML}\n\`\`\`\n\nPlease apply this edit: "${prompt}"`;
     geminiFullPrompt = `${systemPrompt}\n\n${userMessage}`;
 
