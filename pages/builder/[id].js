@@ -14,8 +14,8 @@ export default function Builder() {
 
   const [site, setSite] = useState(null);
   const [html, setHtml] = useState('');
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'html'
-  const [viewMode, setViewMode] = useState('desktop'); // 'desktop', 'tablet', 'mobile'
+  const [activeTab, setActiveTab] = useState('chat');
+  const [viewMode, setViewMode] = useState('desktop');
   
   // Loading states
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
@@ -26,6 +26,13 @@ export default function Builder() {
   const [chatHistory, setChatHistory] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+
+  // Rename states
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameError, setRenameError] = useState('');
+  const [isSavingRename, setIsSavingRename] = useState(false);
+  const renameInputRef = useRef(null);
 
   const previewLoaderRef = useRef(null);
   const chatBottomRef = useRef(null);
@@ -232,6 +239,75 @@ You can drag-and-drop this folder or connect it to:
     showToast('Your website has been successfully published!', 'success');
   };
 
+  const handleStartRename = () => {
+    if ((site.rename_count || 0) >= 2) {
+      showToast('Rename limit reached. You can only rename a site 2 times.', 'error');
+      return;
+    }
+    setRenameValue(site.name);
+    setRenameError('');
+    setIsRenaming(true);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const handleCancelRename = () => {
+    setIsRenaming(false);
+    setRenameError('');
+  };
+
+  const handleSaveRename = async () => {
+    const newName = renameValue.trim();
+    if (!newName) { setRenameError('Name cannot be empty.'); return; }
+    if (newName === site.name) { setIsRenaming(false); return; }
+    if (newName.length < 2) { setRenameError('Name must be at least 2 characters.'); return; }
+
+    const newSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+    setIsSavingRename(true);
+    setRenameError('');
+
+    // Check global uniqueness
+    const { data: existing } = await supabase
+      .from('sites')
+      .select('id')
+      .eq('slug', newSlug)
+      .neq('id', site.id)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      setRenameError(`"${newName}" is already taken. Choose a different name.`);
+      setIsSavingRename(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('sites')
+      .update({
+        name: newName,
+        slug: newSlug,
+        initial: newName.charAt(0).toUpperCase(),
+        rename_count: (site.rename_count || 0) + 1,
+      })
+      .eq('id', site.id);
+
+    setIsSavingRename(false);
+
+    if (error) {
+      setRenameError('Failed to save. Please try again.');
+      return;
+    }
+
+    setSite((prev) => ({
+      ...prev,
+      name: newName,
+      slug: newSlug,
+      initial: newName.charAt(0).toUpperCase(),
+      rename_count: (prev.rename_count || 0) + 1,
+    }));
+    setIsRenaming(false);
+    showToast(`Renamed to "${newName}" successfully!`, 'success');
+  };
+
   const handleSendChat = async (e) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || isThinking) return;
@@ -349,7 +425,60 @@ You can drag-and-drop this folder or connect it to:
             ← Dashboard
           </button>
           <div className={styles.divider} />
-          <span className={styles.siteName}>{site.name}</span>
+
+          {isRenaming ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => { setRenameValue(e.target.value); setRenameError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRename(); if (e.key === 'Escape') handleCancelRename(); }}
+                style={{
+                  background: 'var(--surface2, #13131e)',
+                  border: renameError ? '1px solid #ef4444' : '1px solid var(--accent, #6c63ff)',
+                  borderRadius: '6px',
+                  color: 'var(--text, #f0f0ff)',
+                  padding: '4px 10px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  width: '180px',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSaveRename}
+                disabled={isSavingRename}
+                style={{ background: 'var(--accent, #6c63ff)', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
+              >
+                {isSavingRename ? '...' : 'Save'}
+              </button>
+              <button
+                onClick={handleCancelRename}
+                style={{ background: 'transparent', color: 'var(--muted, #8888aa)', border: '1px solid var(--border, #1e1e2e)', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+              {renameError && (
+                <span style={{ color: '#ef4444', fontSize: '0.75rem', maxWidth: '160px' }}>{renameError}</span>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className={styles.siteName}>{site.name}</span>
+              {(site.rename_count || 0) < 2 ? (
+                <button
+                  onClick={handleStartRename}
+                  title={`Rename (${2 - (site.rename_count || 0)} rename${2 - (site.rename_count || 0) === 1 ? '' : 's'} left)`}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted, #8888aa)', fontSize: '0.8rem', padding: '2px 6px', borderRadius: '4px' }}
+                >
+                  ✏️
+                </button>
+              ) : (
+                <span title="Rename limit reached (2/2)" style={{ fontSize: '0.7rem', color: 'var(--muted, #8888aa)', opacity: 0.5 }}>✏️</span>
+              )}
+            </div>
+          )}
+
           <div className={styles.badge}>
             <span className={styles.badgeDot} />
             Published
