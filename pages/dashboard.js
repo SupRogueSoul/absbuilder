@@ -14,6 +14,9 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState('');
+  const [siteName, setSiteName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [isCheckingName, setIsCheckingName] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('Designing layout...');
   const [dbLoading, setDbLoading] = useState(true);
@@ -131,36 +134,25 @@ export default function Dashboard() {
     setPrompt(text);
   };
 
-  const extractSiteName = (p) => {
-    const lower = p.toLowerCase();
-    if (lower.includes('portfolio')) return 'My Portfolio';
-    if (lower.includes('shop') || lower.includes('store')) return 'My Shop';
-    if (lower.includes('restaurant') || lower.includes('cafe') || lower.includes('coffee')) return 'My Restaurant';
-    if (lower.includes('agency')) return 'My Agency';
-    if (lower.includes('blog')) return 'My Blog';
-    if (lower.includes('saas') || lower.includes('startup')) return 'My SaaS';
-
-    const words = p
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter((w) => {
-        const stopWords = ['a', 'an', 'the', 'website', 'design', 'make', 'build', 'for', 'of', 'and', 'to', 'in', 'with', 'on', 'my'];
-        return w && !stopWords.includes(w.toLowerCase());
-      });
-
-    if (words.length >= 2) {
-      const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-      return `${cap(words[0])} ${cap(words[1])} Site`;
-    } else if (words.length === 1) {
-      const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-      return `${cap(words[0])} Site`;
-    }
-    return 'My Awesome Site';
+  // Check if a site name is already taken globally (across all users)
+  const checkNameAvailability = async (name) => {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const { data, error } = await supabase
+      .from('sites')
+      .select('id')
+      .eq('slug', slug)
+      .limit(1);
+    if (error) return true; // allow on error, don't block user
+    return data.length === 0; // true = available
   };
 
   const handleCreate = async () => {
     if (!prompt.trim()) {
       showToast('Please describe your website first.', 'error');
+      return;
+    }
+    if (!siteName.trim()) {
+      showToast('Please enter a name for your website.', 'error');
       return;
     }
 
@@ -170,9 +162,7 @@ export default function Dashboard() {
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'generate', prompt }),
       });
 
@@ -184,39 +174,35 @@ export default function Dashboard() {
       }
 
       if (data.fallback) {
-        showToast('Website generated with fallback content due to API limits or connection issues.', 'warning');
+        showToast('Website generated with fallback content due to API limits.', 'warning');
       }
 
-      const siteName = extractSiteName(prompt);
+      const trimmedName = siteName.trim();
+      const slug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const randomColors = ['#6c63ff', '#a78bfa', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
       const siteColor = randomColors[Math.floor(Math.random() * randomColors.length)];
 
       const newSite = {
         user_id: user.id,
-        name: siteName,
-        slug: siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        name: trimmedName,
+        slug,
         color: siteColor,
-        initial: siteName.charAt(0).toUpperCase(),
+        initial: trimmedName.charAt(0).toUpperCase(),
         prompt: prompt,
         generated_html: data.html
       };
 
-      console.log('Attempting Supabase insert for user:', user.id);
       const { data: insertedSite, error: insertError } = await supabase
         .from('sites')
         .insert([newSite])
         .select()
         .single();
 
-      console.log('Supabase insert result:', { insertedSite, insertError });
-
       if (insertError) {
-        console.error('Supabase insert error full details:', JSON.stringify(insertError, null, 2));
         throw new Error(`Database error: ${insertError.message} (code: ${insertError.code})`);
       }
 
       if (!insertedSite || !insertedSite.id) {
-        console.error('Insert succeeded but no data returned:', insertedSite);
         throw new Error('Site was created but no ID was returned. Check Supabase RLS policies.');
       }
 
@@ -230,12 +216,33 @@ export default function Dashboard() {
     }
   };
 
-  const handleNextStep = () => {
-    if (!prompt.trim()) {
-      showToast('Please describe your website first.', 'error');
-      return;
+  const handleNextStep = async () => {
+    if (step === 1) {
+      if (!prompt.trim()) {
+        showToast('Please describe your website first.', 'error');
+        return;
+      }
+      setStep(2);
+    } else if (step === 2) {
+      const name = siteName.trim();
+      if (!name) {
+        setNameError('Please enter a name for your website.');
+        return;
+      }
+      if (name.length < 2) {
+        setNameError('Name must be at least 2 characters.');
+        return;
+      }
+      setIsCheckingName(true);
+      setNameError('');
+      const available = await checkNameAvailability(name);
+      setIsCheckingName(false);
+      if (!available) {
+        setNameError(`"${name}" is already taken. Please choose a different name.`);
+        return;
+      }
+      setStep(3);
     }
-    setStep(2);
   };
 
   if (loading || dbLoading) {
@@ -330,7 +337,7 @@ export default function Dashboard() {
           ))}
 
           {/* Dash Card (Create New) */}
-          <div className={styles.createCard} onClick={() => { setStep(1); setPrompt(''); setIsModalOpen(true); }}>
+          <div className={styles.createCard} onClick={() => { setStep(1); setPrompt(''); setSiteName(''); setNameError(''); setIsModalOpen(true); }}>
             <div className={styles.createIcon}>＋</div>
             <div className={styles.createText}>Create New Website</div>
             <div className={styles.createSubtext}>Generate in seconds with AI</div>
@@ -363,14 +370,19 @@ export default function Dashboard() {
               <>
                 {/* Step Indicator */}
                 <div className={styles.stepIndicator}>
-                  <div className={`${styles.stepDot} ${step === 1 ? styles.stepDotActive : ''}`}>
+                  <div className={`${styles.stepDot} ${step >= 1 ? styles.stepDotActive : ''}`}>
                     <div className={styles.stepNumber}>1</div>
                     <span>Describe</span>
                   </div>
                   <div className={styles.stepLine} />
-                  <div className={`${styles.stepDot} ${step === 2 ? styles.stepDotActive : ''}`}>
+                  <div className={`${styles.stepDot} ${step >= 2 ? styles.stepDotActive : ''}`}>
                     <div className={styles.stepNumber}>2</div>
-                    <span>Review & Create</span>
+                    <span>Name</span>
+                  </div>
+                  <div className={styles.stepLine} />
+                  <div className={`${styles.stepDot} ${step >= 3 ? styles.stepDotActive : ''}`}>
+                    <div className={styles.stepNumber}>3</div>
+                    <span>Generate</span>
                   </div>
                 </div>
 
@@ -404,6 +416,28 @@ export default function Dashboard() {
                       </button>
                     </div>
                   </div>
+                ) : step === 2 ? (
+                  <div className={styles.stepContent}>
+                    <label className={styles.suggestionsLabel} style={{ display: 'block', marginBottom: '8px' }}>
+                      Website Name
+                    </label>
+                    <input
+                      type="text"
+                      className={styles.promptTextarea}
+                      style={{ height: 'auto', padding: '12px 16px', fontSize: '1rem' }}
+                      placeholder="e.g. Paper Rex, Nova Studio, Pixel Labs..."
+                      value={siteName}
+                      onChange={(e) => { setSiteName(e.target.value); setNameError(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleNextStep()}
+                      autoFocus
+                    />
+                    {nameError && (
+                      <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '8px' }}>{nameError}</p>
+                    )}
+                    <p style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: '10px' }}>
+                      This name must be unique across all ABSBuilder sites.
+                    </p>
+                  </div>
                 ) : (
                   <div className={styles.stepContent}>
                     <div className={styles.reviewBox}>
@@ -412,8 +446,8 @@ export default function Dashboard() {
                     </div>
                     <div className={styles.metaRow}>
                       <div className={styles.metaField}>
-                        <span>🏷️ Extracted Name:</span>
-                        <strong style={{ color: 'var(--accent2)' }}>{extractSiteName(prompt)}</strong>
+                        <span>🏷️ Site Name:</span>
+                        <strong style={{ color: 'var(--accent2)' }}>{siteName}</strong>
                       </div>
                       <div className={styles.metaField}>
                         <span>🤖 Model:</span>
@@ -436,13 +470,29 @@ export default function Dashboard() {
                         onClick={handleNextStep} 
                         className={`${styles.modalBtn} ${styles.btnGenerate}`}
                       >
-                        Next Step
+                        Next →
+                      </button>
+                    </>
+                  ) : step === 2 ? (
+                    <>
+                      <button 
+                        onClick={() => setStep(1)} 
+                        className={`${styles.modalBtn} ${styles.btnCancel}`}
+                      >
+                        Back
+                      </button>
+                      <button 
+                        onClick={handleNextStep}
+                        className={`${styles.modalBtn} ${styles.btnGenerate}`}
+                        disabled={isCheckingName}
+                      >
+                        {isCheckingName ? 'Checking...' : 'Next →'}
                       </button>
                     </>
                   ) : (
                     <>
                       <button 
-                        onClick={() => setStep(1)} 
+                        onClick={() => setStep(2)} 
                         className={`${styles.modalBtn} ${styles.btnCancel}`}
                       >
                         Back
