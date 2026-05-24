@@ -43,7 +43,7 @@ Describe your idea. Watch it build. Edit with chat.
 
 ## 🧠 About
 
-**ABSBuilder** is a full-stack AI website builder inspired by [Lovable.ai](https://lovable.ai) and [Chai Builder](https://chaibuilder.com). It lets anyone — designer or not — generate a complete, production-ready website by simply describing what they want in plain English.
+**ABSBuilder** is a full-stack AI website builder inspired by [Lovable.ai](https://lovable.ai). It lets anyone — designer or not — generate a complete, production-ready website by simply describing what they want in plain English.
 
 The generated output is a **fully self-contained single-file HTML website** with embedded CSS animations, responsive layouts, working navigation, and multiple content sections. Users can then refine their site through a conversational AI chat interface, switch between desktop/tablet/mobile previews, copy the raw HTML, or download a complete Vite-ready project package.
 
