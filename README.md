@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ ABSBuilder
+# ⚡ ABSBuilde
 
 ### AI-Powered Website Builder
 
